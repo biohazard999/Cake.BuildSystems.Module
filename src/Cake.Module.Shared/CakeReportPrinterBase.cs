@@ -36,8 +36,43 @@ namespace Cake.Module.Shared
             _console = console;
         }
 
+        /// <summary>
+        /// Gets a value indicating whether durations are rendered as humanized timespans.
+        /// </summary>
+        /// <remarks>
+        /// Controlled by the <c>BuildSystems_HumanizedTimespans</c> Cake configuration setting. It is off
+        /// by default, so a report keeps the full <see cref="TimeSpan"/> precision Cake itself uses unless
+        /// the setting is turned on.
+        /// </remarks>
+        protected bool UseHumanizedTimespans
+        {
+            get
+            {
+                var configuration = _context?.Configuration;
+                return configuration != null && configuration.GetConfigFlag("BuildSystems_HumanizedTimespans");
+            }
+        }
+
         /// <inheritdoc />
         public abstract void Write(CakeReport report);
+
+        /// <inheritdoc/>
+        public virtual void WriteLifeCycleStep(string name, Verbosity verbosity)
+        {
+            new CakeReportPrinter(_console, _context).WriteLifeCycleStep(name, verbosity);
+        }
+
+        /// <inheritdoc/>
+        public virtual void WriteStep(string name, Verbosity verbosity)
+        {
+            new CakeReportPrinter(_console, _context).WriteLifeCycleStep(name, verbosity);
+        }
+
+        /// <inheritdoc/>
+        public virtual void WriteSkippedStep(string name, Verbosity verbosity)
+        {
+            new CakeReportPrinter(_console, _context).WriteLifeCycleStep(name, verbosity);
+        }
 
         /// <summary>
         /// Writes the report to the <see cref="IConsole"/>.
@@ -45,6 +80,8 @@ namespace Cake.Module.Shared
         /// <param name="report">The report to write.</param>
         protected void WriteToConsole(CakeReport report)
         {
+            var includeSkippedReasonColumn = report.Any(r => !string.IsNullOrEmpty(r.SkippedMessage));
+
             var maxTaskNameLength = 29;
             foreach (var item in report)
             {
@@ -60,7 +97,14 @@ namespace Cake.Module.Shared
 
             // Write header.
             _console.WriteLine();
-            _console.WriteLine(lineFormat, "Task", "Duration");
+            if (includeSkippedReasonColumn)
+            {
+                _console.WriteLine(lineFormat, "Task", "Duration", "Status", "Skip Reason");
+            }
+            else
+            {
+                _console.WriteLine(lineFormat, "Task", "Duration", "Status");
+            }
             _console.WriteLine(new string('-', 20 + maxTaskNameLength));
 
             // Write task status.
@@ -69,7 +113,14 @@ namespace Cake.Module.Shared
                 if (ShouldWriteTask(item))
                 {
                     _console.ForegroundColor = GetItemForegroundColor(item);
-                    _console.WriteLine(lineFormat, item.TaskName, FormatDuration(item));
+                    if (includeSkippedReasonColumn)
+                    {
+                        _console.WriteLine(lineFormat, item.TaskName, FormatDuration(item), item.ExecutionStatus.ToReportStatus(), item.SkippedMessage);
+                    }
+                    else
+                    {
+                        _console.WriteLine(lineFormat, item.TaskName, FormatDuration(item), item.ExecutionStatus.ToReportStatus());
+                    }
                 }
             }
 
@@ -95,13 +146,33 @@ namespace Cake.Module.Shared
         }
 
         /// <summary>
-        /// Formats a <see cref="TimeSpan"/>.
+        /// Formats a <see cref="TimeSpan"/>, honouring <see cref="UseHumanizedTimespans"/>.
         /// </summary>
         /// <param name="time">The <see cref="TimeSpan"/> to format.</param>
         /// <returns>A formatted string.</returns>
-        protected static string FormatTime(TimeSpan time)
+        protected string FormatTime(TimeSpan time)
         {
-            return time.ToString("c", CultureInfo.InvariantCulture);
+            return UseHumanizedTimespans
+                ? time.Humanize()
+                : time.ToString("c", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Returns the formatted time it took to process one <see cref="CakeReportEntry"/>,
+        /// honouring <see cref="UseHumanizedTimespans"/>.
+        /// </summary>
+        /// <param name="item">The <see cref="CakeReportEntry"/>.</param>
+        /// <returns>The formatted time.</returns>
+        protected string FormatDuration(CakeReportEntry item)
+        {
+            if (item.ExecutionStatus == CakeTaskExecutionStatus.Skipped)
+            {
+                // A humanized report leaves the cell of a task that never ran empty. Full precision keeps
+                // Cake's dash, so that turning the setting off leaves the report exactly as it was.
+                return UseHumanizedTimespans ? string.Empty : "-";
+            }
+
+            return FormatTime(item.Duration);
         }
 
         /// <summary>
@@ -113,21 +184,6 @@ namespace Cake.Module.Shared
         {
             return entries.Select(i => i.Duration)
                 .Aggregate(TimeSpan.Zero, (t1, t2) => t1 + t2);
-        }
-
-        /// <summary>
-        /// Returns the formatted time it took to process one <see cref="CakeReportEntry"/>.
-        /// </summary>
-        /// <param name="item">The <see cref="CakeReportEntry"/>.</param>
-        /// <returns>The formatted time.</returns>
-        protected static string FormatDuration(CakeReportEntry item)
-        {
-            if (item.ExecutionStatus == CakeTaskExecutionStatus.Skipped)
-            {
-                return "Skipped";
-            }
-
-            return FormatTime(item.Duration);
         }
 
         /// <summary>

@@ -1,7 +1,4 @@
-#load nuget:?package=Cake.Recipe&version=2.2.1
-
-// Workaround for https://github.com/cake-contrib/Cake.Recipe/issues/854
-#tool nuget:?package=NuGet.CommandLine&version=5.8.1
+#load nuget:?package=Cake.Recipe&version=4.0.0
 
 Environment.SetVariableNames();
 
@@ -13,19 +10,16 @@ BuildParameters.SetParameters(
   sourceDirectoryPath: "./src",
   title: "Cake.BuildSystems.Module",
   repositoryOwner: "cake-contrib",
-  shouldRunDupFinder: false, // leave this out, for now.
   shouldRunDotNetCorePack: true,
   shouldUseDeterministicBuilds: true,
-  gitterMessage: "@/all " + standardNotificationMessage,
   twitterMessage: standardNotificationMessage,
+  shouldRunCodecov: false,
   preferredBuildProviderType: BuildProviderType.GitHubActions,
-  preferredBuildAgentOperatingSystem: PlatformFamily.Linux);
+  preferredBuildAgentOperatingSystem: PlatformFamily.Linux,
+  shouldUseTargetFrameworkPath: false);
 
 BuildParameters.PrintParameters(Context);
 
 ToolSettings.SetToolSettings(context: Context);
-
-ToolSettings.SetToolPreprocessorDirectives(
-    reSharperTools: "#tool nuget:?package=JetBrains.ReSharper.CommandLineTools&version=2021.2.0");
 
 Build.RunDotNetCore();
